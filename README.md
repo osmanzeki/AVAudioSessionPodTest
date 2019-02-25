@@ -7,6 +7,8 @@ Works with AirPods™.
 
 Uses [Swift-imgui](https://github.com/mnmly/Swift-imgui) (cause why would you need anyting else ?)
 
+(tested on iOS 12, deployment target prob. iOS 10)
+
 # Installation
 Might need carthage bootstrap to set things up correctly
 
@@ -18,3 +20,5 @@ Set your options and mode if needed and press 'Set Category' ( defaults are auto
 'Play testing sample' uses its own player to play sample clip on current output
 
 'Start recording' records to temporary file from selected input and plays it looped back immediately once stopped
+
+![AVAudioSessionPodTest](https://raw.githubusercontent.com/r618/AVAudioSessionPodTest/master/IMG_0272.png)
