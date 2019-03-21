@@ -39,11 +39,19 @@ class ViewController: UIViewController
 
     
     // sample clip player for testing output
-    var samplePlayer: AVAudioPlayer?;
+    var samplePlayer: AVAudioPlayer?
     
     // recorder
-    var recorder: AVAudioRecorder?;
-    var recordingPlayer: AVAudioPlayer?;
+    var recorder: AVAudioRecorder?
+    var recordingPlayer: AVAudioPlayer?
+    
+    // recording input tap
+    // size of the buffer & waveform points
+    let bSize: UInt32 = 1024
+    // recording buffer
+    var rec_engine: AVAudioEngine?
+    // recording waveforms per channel
+    var waveforms: [[Float32]] = [[]]
     
     override func viewDidLoad()
     {
@@ -200,6 +208,12 @@ class ViewController: UIViewController
                             self.StopRecording()
                             self.StartRecordingPlayback()
                         }
+                        
+                        // input waveforms
+                        for waveform in self.waveforms
+                        {
+                            imgui.plotLines("", values: waveform, valuesOffset: 0, overlayText: "", scaleMin: -1.0, scaleMax: 1.0)
+                        }
                     }
                     else
                     {
@@ -320,10 +334,53 @@ class ViewController: UIViewController
         // it might be a bug in iOS 12 (.1.4 at the time) - esp. since other bugreports seemed to be submitted - e.g. https://github.com/CraigLn/ios12-airpods-routing-bugreport - dealing with similar inconsistency on outputs -
         // inputs and outpus are tighly coupled for BT devices: see e.g. https://developer.apple.com/library/archive/qa/qa1799/_index.html
         try? AVAudioSession.sharedInstance().setPreferredInput(self.preferredInput)
+        
+        
+        
+        // setup input buffer tap
+        self.rec_engine = AVAudioEngine.init()
+        
+        if let rec_mixer = self.rec_engine?.mainMixerNode, let rec_input = self.rec_engine?.inputNode
+        {
+            self.rec_engine?.connect(rec_input, to: rec_mixer, format: rec_input.inputFormat(forBus: 0))
+            
+            // install the tap
+            rec_input.installTap(onBus: 0, bufferSize: self.bSize, format: rec_input.inputFormat(forBus: 0)) { (tapBuffer, when) in
+                
+                let bufferList = tapBuffer.audioBufferList
+                var startBuffer = bufferList.pointee.mBuffers
+                let bufferCount = Int(bufferList.pointee.mNumberBuffers)
+                
+                let buffers = UnsafeBufferPointer<AudioBuffer>(start: &startBuffer, count: bufferCount)
+                
+                // init result buffers
+                if bufferCount != self.waveforms.count
+                {
+                    self.waveforms = Array(repeating: Array(repeating: 0, count: 0), count: bufferCount)
+                }
+                
+                for i in 0 ..< bufferCount
+                {
+                    let buffer = buffers[i]
+                    let float32Ptr = buffer.mData?.bindMemory(to: Float32.self, capacity: Int(buffer.mDataByteSize))
+                    
+                    let dataCount = Int(buffer.mDataByteSize) / MemoryLayout<Float32>.size
+                    let float32Buffer = UnsafeBufferPointer(start: float32Ptr, count: dataCount)
+                    
+                    self.waveforms[i] = Array(float32Buffer)
+                }
+            }
+
+            // start the engine
+            self.rec_engine?.prepare()
+            try? self.rec_engine?.start()
+        }
     }
     
     func StopRecording()
     {
+        self.rec_engine?.stop()
+        
         self.recorder?.stop()
         self.recorder = nil
     }
