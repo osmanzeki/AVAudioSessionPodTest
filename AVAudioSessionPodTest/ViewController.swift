@@ -15,7 +15,7 @@ class ViewController: UIViewController
     // only .playAndRecord .record categories makes sense since we want to test recording
     // (.playAndRecord supports only mirrored variant of AirPlay, which seems to be the only difference to playback modes/categories)
     // https://developer.apple.com/documentation/avfoundation/avaudiosession/audio_session_categories?language=objc
-    var categories: [AVAudioSession.Category] = [.record, .playAndRecord]
+    var categories: [AVAudioSession.Category] = [.record, .playAndRecord, .playback, .ambient, .soloAmbient, .multiRoute]
     var categoryIdx: Int = 1
     // mode selected
     var mode: AVAudioSession.Mode = AVAudioSession.Mode.default
@@ -250,35 +250,51 @@ class ViewController: UIViewController
 
         // activate session with entered parameters
         try? AVAudioSession.sharedInstance().setActive(true, options: AVAudioSession.SetActiveOptions.notifyOthersOnDeactivation)
-
-        // grab inputs and outputs
-        // AVAudioSession.sharedInstance().availableInputs?.map{ print($0.portName) }
-        self.availableInputs = AVAudioSession.sharedInstance().availableInputs ?? []
-        self.availableOutputs = AVAudioSession.sharedInstance().currentRoute.outputs
-        
-        
-        // toggle preferred intput change
-        self.preferredInput = self.availableInputs.first
-        try? AVAudioSession.sharedInstance().setPreferredInput(self.preferredInput)
     }
     
     @objc func routeChanged(_ notification: Notification)
     {
-        guard let _ = notification.userInfo?[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription,
-            let reasonRawValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
-            let reason = AVAudioSession.RouteChangeReason(rawValue: reasonRawValue) else {
+        guard
+            let _ = notification.userInfo?[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription
+            , let reasonRawValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            , let reason = AVAudioSession.RouteChangeReason(rawValue: reasonRawValue)
+            else {
                 return
         }
         
-        print("")
-        print("===================== route change - \(reason)")
-        print("")
-        
         // reflect ports change
+        
+        // work around .playback category reporting available inputs ( connect in AVAudioEngine then fails.. )
+        // in general check input and output node for categories for which they make sense
+        switch self.categories[self.categoryIdx]
+        {
+        // no outputs
+        case .record:
+            self.availableInputs = AVAudioSession.sharedInstance().availableInputs ?? []
+            self.availableOutputs = []
+        // no inputs
+        case .playback, .ambient, .soloAmbient:
+            self.availableInputs = []
+            self.availableOutputs = AVAudioSession.sharedInstance().currentRoute.outputs
+        default:
+            self.availableInputs = AVAudioSession.sharedInstance().availableInputs ?? []
+            self.availableOutputs = AVAudioSession.sharedInstance().currentRoute.outputs
+        }
+        
+        // toggle preferred intput change
         // (user's choice (self.preferredInput) should not be changed here - it'd retrigger notification on first input change - which happens .. for reasons (?)
-        // input will be found vie portName instead again)
-        self.availableInputs = AVAudioSession.sharedInstance().availableInputs ?? []
-        self.availableOutputs = AVAudioSession.sharedInstance().currentRoute.outputs
+        // input will be found via portName instead again)
+        // self.preferredInput = self.availableInputs.first
+        
+        print("")
+        print("===================== route change, reason: \(AudioSessionReasonDescription(reason))")
+        print("")
+        print("===================== inputs : \(self.availableInputs.count):")
+        print("\(self.availableInputs)")
+        print("")
+        print("===================== outputs: \(self.availableOutputs.count):")
+        print("\(self.availableOutputs)")
+        print("")
     }
 
     deinit {
@@ -342,6 +358,11 @@ class ViewController: UIViewController
         
         if let rec_mixer = self.rec_engine?.mainMixerNode, let rec_input = self.rec_engine?.inputNode
         {
+            print("Input : \(rec_input.inputFormat(forBus: 0))")
+            print("Input : \(rec_input.outputFormat(forBus: 0))")
+            print("Output: \(rec_mixer.inputFormat(forBus: 0))")
+            print("Output: \(rec_mixer.outputFormat(forBus: 0))")
+            
             self.rec_engine?.connect(rec_input, to: rec_mixer, format: rec_input.inputFormat(forBus: 0))
             
             // install the tap
