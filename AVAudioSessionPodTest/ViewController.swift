@@ -9,6 +9,7 @@
 import UIKit
 import ImGui
 import AVFoundation
+import MediaPlayer
 
 class ViewController: UIViewController
 {
@@ -53,6 +54,8 @@ class ViewController: UIViewController
     // recording waveforms per channel
     var waveforms: [[Float32]] = [[]]
     
+    var mpVolumeView: MPVolumeView?
+    
     override func viewDidLoad()
     {
         super.viewDidLoad()
@@ -74,13 +77,22 @@ class ViewController: UIViewController
         // Add ImGui viewController and view to scene
         if let vc = ImGui.vc {
             
-            addChild(vc)
+            self.addChild(vc)
             vc.didMove(toParent: self)
             
-            view.addSubview(vc.view)
-            
+
             let safeMargin:CGFloat = UIDevice().hasNotch ? 40.0 : 20.0
             vc.view.frame = CGRect(x: 0, y: safeMargin, width: view.frame.width, height: view.frame.height - safeMargin)
+
+            self.view.addSubview(vc.view)
+            
+            
+            self.mpVolumeView = MPVolumeView(frame: CGRect(x: 0, y: safeMargin, width: vc.view.frame.width, height: vc.view.frame.height - safeMargin))
+            self.mpVolumeView?.showsRouteButton = true
+            self.mpVolumeView?.showsVolumeSlider = false
+            self.mpVolumeView?.isHidden = true
+            
+            vc.view.addSubview(self.mpVolumeView!)
         }
         
         // do imgui
@@ -162,6 +174,11 @@ class ViewController: UIViewController
             
             if self.availableOutputs.count > 0
             {
+//                if imgui.button("Show output selector")
+//                {
+//                    self.mpVolumeView?.isHidden = false
+//                }
+                
                 if imgui.button("Request Speaker override")
                 {
                     try? AVAudioSession.sharedInstance().overrideOutputAudioPort(AVAudioSession.PortOverride.speaker)
