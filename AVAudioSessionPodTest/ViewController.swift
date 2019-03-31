@@ -26,35 +26,15 @@ class ViewController: UIViewController
     var options: AVAudioSession.CategoryOptions = []
     // options subset - we select only handful which make sense for recording
     let optionsList: AVAudioSession.CategoryOptions = [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
-    // all available category inputs
-    // first one is default
-    // ( can't be queried continuosly (triggers route changes notifications) - saved here on activation / route change )
-    var availableInputs: [AVAudioSessionPortDescription] = []
-    // input override
-    var preferredInput: AVAudioSessionPortDescription? = nil
-    // all category outputs
-    // first one is default
-    // ( can't be queried continuosly (triggers route changes notifications) - saved here on activation / route change )
-    // overriden via AVAudioSession.PortOverride
-    var availableOutputs: [AVAudioSessionPortDescription] = []
-
     
     // sample clip player for testing output
     var samplePlayer: AVAudioPlayer?
     
     // recorder
+    var recordToFile: Bool = true
     var recorder: AVAudioRecorder?
     var recordingPlayer: AVAudioPlayer?
     
-    // recording input tap
-    // size of the buffer & waveform points
-    let bSize: UInt32 = 1024
-    // recording buffer
-    var rec_engine: AVAudioEngine?
-    // recording waveforms per channel
-    var waveforms: [[Float32]] = [[]]
-    
-    var mpVolumeView: MPVolumeView?
     
     override func viewDidLoad()
     {
@@ -69,7 +49,7 @@ class ViewController: UIViewController
         }
 
         // start audio session with defaults
-        self.SetupAudioSession()
+        AVAudioSessionCapsule.sharedInstance.SetupAVAudioSession(_category: self.categories[self.categoryIdx], _mode: self.mode, _options: self.options)
         
         // start ImGui
         ImGui.initialize(ImGui.API.metal)
@@ -82,17 +62,9 @@ class ViewController: UIViewController
             
 
             let safeMargin:CGFloat = UIDevice().hasNotch ? 40.0 : 20.0
-            vc.view.frame = CGRect(x: 0, y: safeMargin, width: view.frame.width, height: view.frame.height - safeMargin)
+            vc.view.frame = CGRect(x: 0, y: safeMargin, width: self.view.frame.width, height: self.view.frame.height - safeMargin)
 
             self.view.addSubview(vc.view)
-            
-            
-            self.mpVolumeView = MPVolumeView(frame: CGRect(x: 0, y: safeMargin, width: vc.view.frame.width, height: vc.view.frame.height - safeMargin))
-            self.mpVolumeView?.showsRouteButton = true
-            self.mpVolumeView?.showsVolumeSlider = false
-            self.mpVolumeView?.isHidden = true
-            
-            vc.view.addSubview(self.mpVolumeView!)
         }
         
         // do imgui
@@ -149,30 +121,29 @@ class ViewController: UIViewController
             
             if imgui.button("Set Category of AVAudioSession")
             {
-                self.SetupAudioSession()
+                AVAudioSessionCapsule.sharedInstance.SetupAVAudioSession(_category: self.categories[self.categoryIdx], _mode: self.mode, _options: self.options)
             }
             imgui.text("....................")
             
             
             imgui.text("Category inputs: ")
-            for input in self.availableInputs
+            for input in AVAudioSessionCapsule.sharedInstance.availableInputs
             {
-                if imgui.radioButton(input.portName, active: self.preferredInput?.portName == input.portName)
+                if imgui.radioButton(input.portName, active: AVAudioSessionCapsule.sharedInstance.preferredInput?.portName == input.portName)
                 {
-                    self.preferredInput = input
-                    try? AVAudioSession.sharedInstance().setPreferredInput(self.preferredInput)
+                    AVAudioSessionCapsule.sharedInstance.SetPreferredInput(input)
                 }
             }
             
             imgui.text("Category outputs: ")
-            for output in self.availableOutputs
+            for output in AVAudioSessionCapsule.sharedInstance.availableOutputs
             {
                 imgui.text(output.portName)
             }
             
             
             
-            if self.availableOutputs.count > 0
+            if AVAudioSessionCapsule.sharedInstance.availableOutputs.count > 0
             {
 //                if imgui.button("Show output selector")
 //                {
@@ -207,7 +178,7 @@ class ViewController: UIViewController
             
             imgui.text("....................")
             
-            if recordingAllowed && self.availableInputs.count > 0
+            if recordingAllowed && AVAudioSessionCapsule.sharedInstance.availableInputs.count > 0
             {
                 if self.recordingPlayer?.isPlaying ?? false
                 {
@@ -218,22 +189,28 @@ class ViewController: UIViewController
                 }
                 else
                 {
-                    if self.recorder?.isRecording ?? false
+                    if AVAudioSessionCapsule.sharedInstance.rec_engine?.isRunning ?? false
+                        || self.recorder?.isRecording ?? false
                     {
                         if imgui.button("Stop recording")
                         {
                             self.StopRecording()
-                            self.StartRecordingPlayback()
+                            
+                            if (self.recordToFile) {
+                                self.StartRecordingPlayback()
+                            }
                         }
                         
                         // input waveforms
-                        for waveform in self.waveforms
+                        for waveform in AVAudioSessionCapsule.sharedInstance.waveforms
                         {
                             imgui.plotLines("", values: waveform, valuesOffset: 0, overlayText: "", scaleMin: -1.0, scaleMax: 1.0)
                         }
                     }
                     else
                     {
+                        imgui.checkbox("Record to file", active: &self.recordToFile)
+                        
                         if imgui.button("Start recording")
                         {
                             self.StartRecording()
@@ -244,78 +221,6 @@ class ViewController: UIViewController
             
             imgui.end()
         }
-    }
-    
-    func SetupAudioSession()
-    {
-        self.samplePlayer?.stop()
-        
-        // deactivate session first:
-        NotificationCenter.default.removeObserver(self)
-        
-        try? AVAudioSession.sharedInstance().setActive(false, options: AVAudioSession.SetActiveOptions.notifyOthersOnDeactivation)
-        
-        NotificationCenter.default.removeObserver(self)
-        
-        // set (new) category
-        try? AVAudioSession.sharedInstance().setCategory(self.categories[self.categoryIdx], mode: self.mode, options: self.options)
-        // subscibe to route change notification
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(routeChanged(_:)),
-                                               name: AVAudioSession.routeChangeNotification,
-                                               object: nil)
-
-        // activate session with entered parameters
-        try? AVAudioSession.sharedInstance().setActive(true, options: AVAudioSession.SetActiveOptions.notifyOthersOnDeactivation)
-    }
-    
-    @objc func routeChanged(_ notification: Notification)
-    {
-        guard
-            let _ = notification.userInfo?[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription
-            , let reasonRawValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
-            , let reason = AVAudioSession.RouteChangeReason(rawValue: reasonRawValue)
-            else {
-                return
-        }
-        
-        // reflect ports change
-        
-        // work around .playback category reporting available inputs ( connect in AVAudioEngine then fails.. )
-        // in general check input and output node for categories for which they make sense
-        switch self.categories[self.categoryIdx]
-        {
-        // no outputs
-        case .record:
-            self.availableInputs = AVAudioSession.sharedInstance().availableInputs ?? []
-            self.availableOutputs = []
-        // no inputs
-        case .playback, .ambient, .soloAmbient:
-            self.availableInputs = []
-            self.availableOutputs = AVAudioSession.sharedInstance().currentRoute.outputs
-        default:
-            self.availableInputs = AVAudioSession.sharedInstance().availableInputs ?? []
-            self.availableOutputs = AVAudioSession.sharedInstance().currentRoute.outputs
-        }
-        
-        // toggle preferred intput change
-        // (user's choice (self.preferredInput) should not be changed here - it'd retrigger notification on first input change - which happens .. for reasons (?)
-        // input will be found via portName instead again)
-        // self.preferredInput = self.availableInputs.first
-        
-        print("")
-        print("===================== route change, reason: \(AudioSessionReasonDescription(reason))")
-        print("")
-        print("===================== inputs : \(self.availableInputs.count):")
-        print("\(self.availableInputs)")
-        print("")
-        print("===================== outputs: \(self.availableOutputs.count):")
-        print("\(self.availableOutputs)")
-        print("")
-    }
-
-    deinit {
-        NotificationCenter.default.removeObserver(self)
     }
     
 
@@ -349,75 +254,27 @@ class ViewController: UIViewController
     
     func StartRecording()
     {
-        let audioFilename = getDocumentsDirectory().appendingPathComponent("recording.m4a")
+        AVAudioSessionCapsule.sharedInstance.StartRecording()
         
-        let settings = [
-            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 24000,
-            AVNumberOfChannelsKey: 2,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-        ]
-        
-        self.recorder = try? AVAudioRecorder(url: audioFilename, settings: settings)
-        self.recorder?.record()
-        
-        // without this call after the recording has started, the recorder will record from (for some reason) automatically triggered route change where e.g. AirPods are default input
-        // despite previous setPreferredInput call by user which requested default mic
-        // this ensures that preferred input switches back immediately and it seems to work
-        // it might be a bug in iOS 12 (.1.4 at the time) - esp. since other bugreports seemed to be submitted - e.g. https://github.com/CraigLn/ios12-airpods-routing-bugreport - dealing with similar inconsistency on outputs -
-        // inputs and outpus are tighly coupled for BT devices: see e.g. https://developer.apple.com/library/archive/qa/qa1799/_index.html
-        try? AVAudioSession.sharedInstance().setPreferredInput(self.preferredInput)
-        
-        
-        
-        // setup input buffer tap
-        self.rec_engine = AVAudioEngine.init()
-        
-        if let rec_mixer = self.rec_engine?.mainMixerNode, let rec_input = self.rec_engine?.inputNode
+        if self.recordToFile
         {
-            print("Input : \(rec_input.inputFormat(forBus: 0))")
-            print("Input : \(rec_input.outputFormat(forBus: 0))")
-            print("Output: \(rec_mixer.inputFormat(forBus: 0))")
-            print("Output: \(rec_mixer.outputFormat(forBus: 0))")
+            let audioFilename = getDocumentsDirectory().appendingPathComponent("recording.m4a")
             
-            self.rec_engine?.connect(rec_input, to: rec_mixer, format: rec_input.inputFormat(forBus: 0))
+            let settings = [
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 24000,
+                AVNumberOfChannelsKey: 2,
+                AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+            ]
             
-            // install the tap
-            rec_input.installTap(onBus: 0, bufferSize: self.bSize, format: rec_input.inputFormat(forBus: 0)) { (tapBuffer, when) in
-                
-                let bufferList = tapBuffer.audioBufferList
-                var startBuffer = bufferList.pointee.mBuffers
-                let bufferCount = Int(bufferList.pointee.mNumberBuffers)
-                
-                let buffers = UnsafeBufferPointer<AudioBuffer>(start: &startBuffer, count: bufferCount)
-                
-                // init result buffers
-                if bufferCount != self.waveforms.count
-                {
-                    self.waveforms = Array(repeating: Array(repeating: 0, count: 0), count: bufferCount)
-                }
-                
-                for i in 0 ..< bufferCount
-                {
-                    let buffer = buffers[i]
-                    let float32Ptr = buffer.mData?.bindMemory(to: Float32.self, capacity: Int(buffer.mDataByteSize))
-                    
-                    let dataCount = Int(buffer.mDataByteSize) / MemoryLayout<Float32>.size
-                    let float32Buffer = UnsafeBufferPointer(start: float32Ptr, count: dataCount)
-                    
-                    self.waveforms[i] = Array(float32Buffer)
-                }
-            }
-
-            // start the engine
-            self.rec_engine?.prepare()
-            try? self.rec_engine?.start()
+            self.recorder = try? AVAudioRecorder(url: audioFilename, settings: settings)
+            self.recorder?.record()
         }
     }
     
     func StopRecording()
     {
-        self.rec_engine?.stop()
+        AVAudioSessionCapsule.sharedInstance.StopRecording()
         
         self.recorder?.stop()
         self.recorder = nil

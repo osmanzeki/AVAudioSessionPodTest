@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		9026AF122250230B009EE174 /* AVAudioSessionCapsule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9026AF112250230B009EE174 /* AVAudioSessionCapsule.swift */; };
 		9066819722226ACF00B245DF /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9066819622226ACF00B245DF /* AppDelegate.swift */; };
 		9066819922226ACF00B245DF /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9066819822226ACF00B245DF /* ViewController.swift */; };
 		9066819C22226ACF00B245DF /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 9066819A22226ACF00B245DF /* Main.storyboard */; };
@@ -19,6 +20,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		9026AF112250230B009EE174 /* AVAudioSessionCapsule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AVAudioSessionCapsule.swift; sourceTree = "<group>"; };
 		9066819322226ACF00B245DF /* AVAudioSessionPodTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AVAudioSessionPodTest.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9066819622226ACF00B245DF /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		9066819822226ACF00B245DF /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
@@ -74,6 +76,7 @@
 				9066819D22226AD100B245DF /* Assets.xcassets */,
 				9066819F22226AD100B245DF /* LaunchScreen.storyboard */,
 				906681A222226AD100B245DF /* Info.plist */,
+				9026AF112250230B009EE174 /* AVAudioSessionCapsule.swift */,
 			);
 			path = AVAudioSessionPodTest;
 			sourceTree = "<group>";
@@ -199,6 +202,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9026AF122250230B009EE174 /* AVAudioSessionCapsule.swift in Sources */,
 				9066819922226ACF00B245DF /* ViewController.swift in Sources */,
 				906681B42222DC7400B245DF /* Extensions.swift in Sources */,
 				9066819722226ACF00B245DF /* AppDelegate.swift in Sources */,
