@@ -41,4 +41,4 @@ Set your options and mode if needed and press 'Set Category' ( defaults are auto
 
 'Start recording' records to temporary file from selected input and plays it looped back immediately once stopped
 
-![AVAudioSessionPodTest](https://raw.githubusercontent.com/osmanzeki/AVAudioSessionPodTest/master/IMG_0272.png)
+![AVAudioSessionPodTest](IMG_0272.png)
