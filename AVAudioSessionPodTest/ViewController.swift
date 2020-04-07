@@ -17,13 +17,18 @@ class ViewController: UIViewController
     // (.playAndRecord supports only mirrored variant of AirPlay, which seems to be the only difference to playback modes/categories)
     // https://developer.apple.com/documentation/avfoundation/avaudiosession/audio_session_categories?language=objc
     var categories: [AVAudioSession.Category] = [.record, .playAndRecord, .playback, .ambient, .soloAmbient, .multiRoute]
+    
     var categoryIdx: Int = 1
+    
     // mode selected
     var mode: AVAudioSession.Mode = AVAudioSession.Mode.default
+    
     // modes for category -  we select only handful which make sense for recording
-    let modeList: [AVAudioSession.Mode] = [.default, .voiceChat, .videoChat, .gameChat, .videoRecording, .spokenAudio]
+    let modeList: [AVAudioSession.Mode] = [.default, .voiceChat, .measurement, .gameChat, .videoRecording, .spokenAudio]
+    
     // options selected
     var options: AVAudioSession.CategoryOptions = []
+    
     // options subset - we select only handful which make sense for recording
     let optionsList: AVAudioSession.CategoryOptions = [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
     
@@ -34,6 +39,9 @@ class ViewController: UIViewController
     var recordToFile: Bool = true
     var recorder: AVAudioRecorder?
     var recordingPlayer: AVAudioPlayer?
+    
+    // misc
+    var lastRecordingTimestamp: Int64 = 0
     
     
     override func viewDidLoad()
@@ -67,23 +75,43 @@ class ViewController: UIViewController
             self.view.addSubview(vc.view)
         }
         
+        // Device specific settings
+        let deviceIdiom = UIScreen.main.traitCollection.userInterfaceIdiom
+        let fontScale = 2.25
+        var scaleFactor = 1.0
+
+        switch (deviceIdiom) {
+            case .phone:
+                print("iPhone and iPod touch style UI")
+                scaleFactor = 1.0
+            
+            case .pad:
+                print("iPad style UI")
+                scaleFactor = 1.5
+            
+            case .tv:
+                print("tvOS style UI")
+            
+            default:
+                print("Unspecified UI idiom")
+        }
+        
         // do imgui
         ImGui.draw { (imgui) in
-            
             // this is the ultimate stupidity, but avoid unbearable flickering of the ImGui which for some reason happens on my iPhone 7
             // less when under debugging session, but the UI is completely unusable when run normally on the phone
             usleep(100)
             
-            imgui.setWindowFontScale(2.25)
+            imgui.setWindowFontScale(fontScale * scaleFactor)
             
             // create a window overlayed over the whole canvas so we can customize appearance and behaviour
             imgui.setNextWindowPos(CGPoint.zero, cond: .always)
             imgui.setNextWindowSize(self.view.frame.size)
             
-            imgui.begin("AVAudioSession recording 🧪_-ªº", show: nil, flags: [ImGuiWindowFlags.noCollapse, ImGuiWindowFlags.noMove, ImGuiWindowFlags.noResize])
+            imgui.begin("AVAudioSession recording", show: nil, flags: [ImGuiWindowFlags.noCollapse, ImGuiWindowFlags.noMove, ImGuiWindowFlags.noResize])
             
             // this has to be after the window opening, for some reason
-            imgui.setWindowFontScale(2.25)
+            imgui.setWindowFontScale(fontScale * scaleFactor)
             
             imgui.text("Press Set Category after changing options")
             
@@ -222,11 +250,6 @@ class ViewController: UIViewController
             imgui.end()
         }
     }
-    
-
-    
-    
-    
 
     func StartSamplePlayer()
     {
@@ -256,14 +279,18 @@ class ViewController: UIViewController
     {
         AVAudioSessionCapsule.sharedInstance.StartRecording()
         
+        self.lastRecordingTimestamp = Int64(Date().timeIntervalSince1970)
+        
         if self.recordToFile
         {
-            let audioFilename = getDocumentsDirectory().appendingPathComponent("recording.m4a")
+            let audioFilename = getDocumentsDirectory().appendingPathComponent("recording_\(self.lastRecordingTimestamp).m4a")
             
+            // Docs for these settings:
+            // https://developer.apple.com/documentation/avfoundation/audio_track_engineering/audio_settings_and_formats
             let settings = [
                 AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-                AVSampleRateKey: 24000,
-                AVNumberOfChannelsKey: 2,
+                AVSampleRateKey: 12000,
+                AVNumberOfChannelsKey: 1,
                 AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
             ]
             
@@ -283,7 +310,11 @@ class ViewController: UIViewController
 
     func StartRecordingPlayback()
     {
-        let audioFilename = getDocumentsDirectory().appendingPathComponent("recording.m4a")
+        if self.lastRecordingTimestamp == 0 {
+            return
+        }
+        
+        let audioFilename = getDocumentsDirectory().appendingPathComponent("recording_\(self.lastRecordingTimestamp).m4a")
         
         try? self.recordingPlayer = AVAudioPlayer(contentsOf: audioFilename)
         self.recordingPlayer?.prepareToPlay()
